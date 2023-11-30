@@ -1,0 +1,424 @@
+---
+title: "TF3_Maité-Remiro"
+author: "Maité Remiro"
+date: "2023-11-30"
+output: html_document
+---
+
+## Presentación del Tema
+
+Según un informe oficial del Ministerio de Educación de la República Argentina, se observó un aumento del 67,6% en la cantidad de ingresantes a **universidades nacionales** entre los años 2012 y 2021. Este incremento se tradujo en un crecimiento significativo del 39,7% en la matrícula de estudiantes de pregrado y grado en el sistema universitario.
+
+En la Ciudad Autónoma de Buenos Aires (CABA), donde se encuentran ubicadas *141 sedes de universidades tanto públicas como privadas*, la densidad y diversidad de instituciones educativas resaltan la importancia del análisis de la movilidad urbana. Reconociendo que la movilidad tiene un impacto directo en el acceso a estas casas de estudio, se destaca la necesidad de contar con diversas opciones de transporte público, que no solo mejoren la eficiencia del **desplazamiento**, sino que también promuevan el acceso equitativo a las diversas instituciones académicas. 
+
+En esta línea, para el presente trabajo, se analizan dos medios de transporte específicos, a saber:
+1.**Estaciones Públicas de Bicicletas**
++ Barrio/s con mayor y menor cantidad de Estaciones de Bicicletas Públicas y distribución espacial.
+2..**Líneas y Estaciones de Subte y distribución espacial**
++ Barrio/s con mayor y menor cantidad de Estaciones/Líneas de subte y distribución espacial.
+
+Este enfoque permite explorar posibles relaciones cuantitativas (o no), entre ambas variables. Se busca que el análisis general de los dos medios de transporte públicos seleccionados se integren, para dar respuesta al siguiente interrogante: **¿Cuántas estaciones de Biciletas Públicas y cuántas líneas de subte, se encuentran a una distancia igual o menor a 40 minutos a pie de la Universidad Tecnológica Nacional, ubicada en el barrio de Villa Lugano, comuna n°8?**
+
+Si bien este análisis hace foco en una única insitución a los fines de lo que el trabajo final solicita, el mismo busca proporcionar una comprensión más profunda de la interconexión entre parte del sistea educativo y la movilidad urbana en la zona sur de la CABA, sentando las bases para una posible continuidad del estudio en otras zonas/casas de estudio y/o para posibles mejoras en la planificación urbana y el acceso equitativo a la educación universitaria. 
+
+
+## Activación de Librerías
+
+```{r}
+library(sf)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(leaflet)
+library(osrm)
+library(tidygeocoder)
+library(ggmap)
+```
+
+## Fuente de Datos
++ [Ministerio de Educación de la República Argentina](https://www.argentina.gob.ar/noticias/los-ingresantes-universidades-nacionales-crecieron-mas-de-67-en-los-ultimos-diez-anos#)
++ [Barrios CABA_BA Data](https://data.buenosaires.gob.ar/dataset/barrios)
++ [Estaciones Biciletas_BA Data](https://data.buenosaires.gob.ar/dataset/estaciones-bicicletas-publicas)
++ [Estaciones Subtes_BA Data](https://data.buenosaires.gob.ar/dataset/subte-estaciones)
+
+
+## Exploración de datos
+
+El análisis de datos está situado en la Ciudad Autónoma de Buenos Aires, la cual se encuentra en la región centro-este de la República Argentina, la conforman 48 barrios distribuidos en 15 comunas. En lo que respecta a las dos variables a estudiar, se procede a incorporar las respectivas bases de datos y se realiza un breve análisis exploratorio de las mismas.
+ 
++ **ESTACIONES DE BICICLETAS PÚBLICAS**
+
+```{r}
+estaciones_bici <- read.csv("data/estaciones_bici.csv",
+                       encoding = "latin1",
+                       stringsAsFactors = TRUE)
+```
+
+Una vez incorporado el dataframe se aplican una serie de funciones con el objetivo de entender la composición del mismo y obtener datos iniciales. 
+
+```{r}
+dim(estaciones_bici)
+```
+```{r}
+colnames(estaciones_bici)
+```
+```{r}
+summary(estaciones_bici)
+```
+Tal como se puede observar a partir de la información arrojada por el dataframe, la CABA cuenta con un total de *229 estaciones*. Esta  base de datos a su vez incorpora información adicional como el nombre de la estación, el barrio, la cantidad de anclajes, el tipo, el horario de funcionamiento y su ubicación expresada en longitud y latitud, entre las principales. De este análisis inicial también se destaca que el barrio de *Palermo* es el que cuenta con mayor cantidad de estaciones (29). 
+
++ **ESTACIONES DE SUBTE**
+
+```{r}
+lineas_subte <- st_read("data/lineas_subte/lineas_subte.shp",
+                        stringsAsFactors = TRUE)
+```
+```{r}
+dim(lineas_subte)
+```
+```{r}
+summary(lineas_subte)
+```
+En este caso, se puede observar que hay un total de 82 estaciones de subte, distribuidas en 6 líneas que se identifican con letras del alfabeto: *A, B, c, D, E, H*. La línea que posee mayor cantidad de estaciones es la "A", mientras que la que posee menor cantidad de estaciones es la línea "C".
+
+
+## Análisis y Visualización de Datos: Estaciones de biciletas, subtes.
+
+**Estaciones de Bicicletas**
+
+Un vez realizada la exploración inicial de datos, se realizan una serie de operaciones con el fin de dar respuesta a los interrogantes planteados, iniciando por las estaciones de bicicletas públicas.
+
+```{r}
+estaciones_bici_com <- estaciones_bici %>%
+  group_by(COMUNA) %>%
+  summarise(cantidad = n()) %>%
+  arrange(desc(cantidad))
+```
+
+```{r}
+ggplot(estaciones_bici_com, aes(x = reorder(COMUNA, -cantidad), y = cantidad)) +
+  geom_bar(stat = "identity", fill = "#800080", alpha = 0.7) +
+  theme_minimal() +
+  geom_text(aes(label = cantidad), hjust = 1.5, vjust = 0.2, color = "black", size = 2.5) +
+  labs(title = "Estaciones de bicicletas públicas por Comuna",
+       subtitle = "Ciudad de Buenos Aires",
+       caption= "Fuente: Buenos Aires Data",
+       x = "Comuna",
+       y = "Cantidad") +
+  coord_flip()
+```
+El gráfico permite visualizar la totalidad de estaciones de biciletas por comuna, en donde la **Comuna 1** cuenta con la **mayor cantidad de estaciones de bicicletas** (49), mientras que la **comuna 10** (1) es la que menor cantidad de estaciones de biciletas posee. Asismimo, se puede afirmar que **todas las comunas poseen al menos una estación de biciletas públicas.** 
+
+Si se retoma uno de los propostitos de este trabajo, respecto a las distancias de las estaciones con la Universidad Tecnológica Nacional, sede Villa Lugano, aquí se encuentra un primer dato de relevancia, ya que esta sede se encuentra en la comuna (8) con menos estaciones de biciletas públicas de la CABA. Sin embargo, debido a que hasta el momento no se ha estudiado la distribución espacial, esta información resulta inconcluyente.
+
+En este sentido, resulta relevante agrupar las estaciones por barrio, para ver cuál es la cantidad asignada al barrio de Villa Lugano. 
+
+```{r}
+estaciones_bici_barrio <- estaciones_bici %>%
+  group_by(BARRIO) %>%
+  summarise(cantidad = n()) %>%
+  arrange(desc(cantidad))
+```
+
+```{r}
+ggplot(estaciones_bici_barrio, aes(x = reorder(BARRIO, -cantidad), y = cantidad)) +
+  geom_bar(stat = "identity", fill = "#800080", alpha = 0.7) +
+  theme_minimal() +
+  geom_text(aes(label = cantidad), hjust = 1.5, vjust = 0.2, color = "black", size = 2.5) +
+  labs(title = "Cantidad de Estaciones de Bicicletas Públicas por Barrio",
+       subtitle = "Ciudad de Buenos Aires",
+       caption = "Fuente: Buenos Aires Data",
+       x = "Barrio",
+       y = "Cantidad") +
+  coord_flip() +
+  theme(axis.text.y = element_text(size = 6))
+```
+Tal como se puede observar el Barrio de *Villa Lugano posee un total de 1 estación pública de bicicletas*, ocupando el n° 36 de un universo de 37 barrios con estaciones de biciletas. De esta forma es uno de los tres barrios con menor cantidad de estaciones de bicicletas. A su vez cabe destacar que la CABA tiene un total de 48 barrios, por lo tanto, dado que aquí solo se cuenta con 37 registros, se puede inferir que 11 barrios aún no tinen Estaciones Públicas de Biciletas. Por su parte, el barrio con más estaciones de bicicletas públicas es Palermo (29), tal cual se mencionó en la exploración inicial de datos.
+
+
+A continuación, se incluye un mapa interactivo para explorar la distribución espacial de las estaciones en cada uno de los barrios respectivos. Se valora la utilidad de este enfoque interactivo, ya que proporciona al lector la capacidad de enfocarse en áreas específicas de interés, más allá del estudiado. A su vez, la incorporación de este mapa interactivo enriquece la visualización de los datos y facilita una comprensión más detallada de la distribución de las estaciones en la ciudad.
+
+```{r}
+barrios_caba<- st_read("data/barrios_caba/barrios_caba.shp",
+                            stringsAsFactors =TRUE,
+                            options = "ENCODING=UTF-8")
+```
+
+```{r}
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addAwesomeMarkers(data = estaciones_bici, 
+                    ~long, ~lat, 
+                    icon = awesomeIcons(icon = "fa-bicycle", library = "fa", markerColor = "purple"),
+                    popup = ~nombre) %>%
+  addPolygons(data = barrios_caba, weight = 2, color = "#5b5b5b", fill = FALSE)
+```
+
+**Líneas de Subte**
+
+Una vez finalizado el análisis de las estaciones públicas de biciletas, se procede a realizar el mismo análisis pero con las estaciones y sus líneas de subte correspondiente.Para esto primero es necesario realizar una unión de tablas entre barrios_caba y lineas_subte, dado que esta última no posee información geográfica.
+
+```{r}
+barrios_subte <- st_join(lineas_subte, barrios_caba)
+```
+
+```{r}
+csubte_barrio <- barrios_subte %>%
+  group_by(comuna) %>%
+  summarise(cantidad = n()) %>%
+  arrange(desc(cantidad))
+```
+
+Una vez realizada la unión se analiza su distribución por comuna. 
+```{r}
+ggplot(csubte_barrio, aes(x = reorder(comuna, -cantidad), y = cantidad)) +
+  geom_bar(stat = "identity", fill = "#006400", alpha = 0.7) +
+  theme_minimal() +
+  geom_text(aes(label = cantidad), hjust = 1.5, vjust = 0.2, color = "black", size = 2.5) +
+  labs(title = "Estaciones de Subte por Comuna",
+       subtitle = "Ciudad de Buenos Aires",
+       caption= "Fuente: Buenos Aires Data",
+       x = "Comuna",
+       y = "Cantidad") +
+  coord_flip()
+```
+El gráfico permite visualizar la totalidad de estaciones de subte por comuna, siendo la **comuna 1** la que tiene mayor cantidad de estaciones (32), y la **comuna 12** la de menor cantidad de estaciones (2). En lo que respecta a la comuna de interés, es decir la n° 8, no posee estaciones de subte operativas, lo mismo sucede con las comunas del 9 al 11.
+
+Seguidamente se procede a realizar un agrupamiento de estaciones de subte por barrio, para luego ser visulizadas en un gráfico de barras.
+
+```{r}
+clineas_barrio <- barrios_subte %>%
+  group_by(barrio) %>%
+  summarise(cantidad = n()) %>%
+  arrange(desc(cantidad))
+```
+
+```{r}
+ggplot(clineas_barrio, aes(x = reorder(barrio, -cantidad), y = cantidad)) +
+  geom_bar(stat = "identity", fill = "#006400", alpha = 0.7) +
+  theme_minimal() +
+  geom_text(aes(label = cantidad), hjust = 1.5, vjust = 0.2, color = "black", size = 2.5) +
+  labs(title = "Cantidad de Líneas de Subte por Barrio",
+       subtitle = "Ciudad de Buenos Aires",
+       caption = "Fuente: Buenos Aires Data",
+       x = "Barrio",
+       y = "Cantidad") +
+  coord_flip() +
+  theme(axis.text.y = element_text(size = 6))
+```
+A partir del mismo se puede observar que Villa Urquiza es el barrio con menos estaciones (2) y Balvanera es el barrio con mayor presencia de estaciones (17). En el caso del barrio de interés, el mismo no cuenta con estaciones de subte específicamente. El barrio más cercano con estaciones de subte operativas es el de Flores. A continuación se incluye un mapa interactivo con su distribución espacial.
+
+```{r}
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addAwesomeMarkers(data = estaciones_bici, 
+                    ~long, ~lat, 
+                    icon = awesomeIcons(icon = "fa-subway", library = "fa", markerColor = "darkgreen"),
+                    popup = ~nombre) %>%
+  addPolygons(data = barrios_caba, weight = 2, color = "#5b5b5b", fill = FALSE)
+```
+
+## Análisis Integrado
+
+Una vez realidado el análisis macro de cada uno de los medios de transporte seleccionados (bicicletas y subte) en la CABA, se procede a realizar un recorte en el barrio/comuna de interés, para identificar qué estaciones de subte y qué estaciones de biciletas se encuentran a una distancia de 40 minutos o menos a pie.
+
+```{r}
+UTN <- geo(address = "Mozart 2300, Ciudad de Buenos Aires, Argentina",
+            method = "osm")
+```
+
+```{r}
+UTN
+```
+
+```{r}
+leaflet(UTN) %>%
+  addTiles() %>% 
+  addMarkers(~long, ~lat)
+```
+
+Siendo la georeferenciación correcta se procede a continuar con el análisis. Partiendo del hecho de que la estética del mapa de fondo es por defecto el que provee OpenStreetMap (OSM), se procede a cambiar la misma con las operaciones correspondientes.
+
+```{r}
+leaflet(UTN) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addAwesomeMarkers(
+    ~long, ~lat,
+    icon = awesomeIcons(icon = "university", library = "fa", markerColor = "lightblue"),
+    popup = "UTN")
+```
+
+A continuación se procece a calcular la isócrona correspondiente, la cual permite dar respuesta al interrogante *¿Cuántas estaciones de bicicletas públicas y de estaciones/líneas de subte se encuentran a menos de 40 minutos a pie, en la comuna n°8?*
+
+
+```{r}
+isocrona <- osrmIsochrone(loc = c(UTN$long, UTN$lat),
+                     breaks = seq(from=0,to=40,by=5),
+                     res = 40,
+                     osrm.profile = "foot")
+```
+
+Se procede a representar la misma en un mapa coroplético, luego se agrega el mapa base para precisar la ubicación y facilitar la visualización. 
+
+```{r}
+ggplot()+
+  geom_sf(data=isocrona, aes(fill=isomax), color=NA)+
+  scale_fill_viridis_c(direction=-1)+
+  labs(fill="Minutos (Máx)")+
+  theme_minimal()
+```
+
+```{r}
+leaflet(data = isocrona) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(
+    fillColor = ~colorBin("YlOrRd", domain = isocrona$isomax)(isomax),
+    fillOpacity = 0.5
+  ) %>%
+  addMarkers(data = UTN,
+    popup = "UTN")
+```
+
+Se procede a realizar las operaciones necesarias para identificar la cantidad de estaciones de biciletas localizadas en la comuna n° 8. 
+
+```{r}
+datos_filtrados <- estaciones_bici %>% filter(COMUNA == 8)
+```
+
+```{r}
+st_crs(isocrona)
+```
+
+```{r}
+estaciones_geo <- datos_filtrados %>%
+  st_as_sf(coords=c("long", "lat"), crs=4326)
+```
+
+```{r}
+sf_use_s2(FALSE)
+```
+
+```{r}
+estaciones_geo_2 <- st_intersection(estaciones_geo, isocrona)
+```
+
+```{r}
+leaflet(isocrona) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(fillColor = ~colorBin("YlOrRd", domain = isocrona$isomax)(isomax),
+  color = NA,
+  fillOpacity = 0.5) %>%
+  addMarkers(data=UTN,
+             popup = "UTN") %>%
+  addCircles(data=estaciones_geo_2,
+             popup = ~nombre,
+             color = "black")
+```
+
+Como se puede observar y como se mencinó anteriormente, se encuentra una única estación de bicicletas públicas en la comuna n° 8 a una distancia de aproximadamente 20 minutos a pie. Si bien esto puede tomarse como una evidencia inicial del supuesto de una oferta escasa de movilidad, se decide extender el análisis a sus tres comunas colindantes: 9, 7 y  4. 
+
+```{r}
+est_filt <- estaciones_bici %>% filter(COMUNA %in% c(9, 7, 4, 8))
+```
+
+```{r}
+est_sf <- st_as_sf(est_filt, coords = c("long", "lat"), crs = 4326)
+```
+
+```{r}
+est_sf2 <- st_intersection(est_sf, isocrona)
+```
+
+```{r}
+leaflet(isocrona) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(fillColor = ~colorBin("YlOrRd", domain = isocrona$isomax)(isomax),
+  color = NA,
+  fillOpacity = 0.5) %>%
+  addMarkers(data=UTN,
+             popup = "UTN") %>%
+  addCircles(data=est_sf2,
+             popup = ~nombre,
+             color = "black")
+```
+
+A partir de la extensión del análisis se identifican 3 nuevas estaciones de biciletas que se encuentran a 40 minutos a pie de la Universidad Tecnológica Nacional. 
+
+Por úlitmo, respecto a la segunda variable de análisis, es decir las estaciones de subte, en el apartado *estaciones de subte* se evidenció que la comuna n° 8 no tiene líneas operando, al igual que su comuna colindante n° 9. Sin embargo, las comunas 7 y 4 si poseen estaciones, en este sentido se replica el análisis anterior repitiendo el patron temporal de 40 minutos a pie.
+
+```{r}
+comunas_filtrado <- barrios_subte %>% filter(comuna %in% c(7, 4))
+```
+
+```{r}
+estaciones_filtrado <- comunas_filtrado %>%
+  st_as_sf(coords=c("long", "lat"), crs=4326)
+```
+
+```{r}
+estaciones_filtrado2 <- st_intersection(estaciones_filtrado, isocrona)
+```
+
+```{r}
+puntos <- estaciones_filtrado2[st_geometry_type(estaciones_filtrado2) == "POINT", ]
+```
+
+```{r}
+lineas <- estaciones_filtrado2[st_geometry_type(estaciones_filtrado2) == "LINESTRING", ]
+```
+
+
+```{r}
+leaflet(isocrona) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(
+    fillColor = ~colorBin("YlOrRd", domain = isocrona$isomax)(isocrona$isomax),
+    color = NA,
+    fillOpacity = 0.5
+  ) %>%
+  addMarkers(data = UTN, popup = "UTN") %>%
+  addPolylines(data = lineas, popup = "Línea E", color = "purple")
+```
+
+A partir del mismo se puede observar que la línea "E" es la única que opera a 40 minutos de la UTN, específicamente en el barrio de Flores. La misma se encuentra en cercanías de una de las estaciones de bicicletas públicas antes mencionada, lo que podría contrarestar la falta de movilidad pública en términos de bicicletas y subtes en la zona.
+
+Para finalizar, se esobzan una serie de **conclusiones** a partir del análisis realizado. Asimismo, se incluye un apartado de **notas al docente** que incluye las dificultades que se encontraron en este análisis, las cuales llevaron a realizar ciertas modificaciones a la idea inicial del mismo.
+
+
+## Conclusiones
+El análisis cuantitativo de las estaciones públicas de bicicletas y de las líneas/estaciones de subte en la Ciudad Autónoma de Buenos Aires en general, y en el Barrio de Villa Lugano (comuna 8) en particular, permite identificar una serie de problemáticas y oportunidades, a saber:
+
++**Problemáticas:** Se evidencia una distribución desigual de las estaciones públicas de bicicletas en los distintos barrios de la CABA. Algunos barrios muestran una alta concentración de estaciones, mientras que otros carecen de presencia, principalmente los barrios periféricos. El análisis actual no proporciona datos sobre si esta concentración se relaciona con otros aspectos, como la frecuencia de uso, la densidad de estaciones por km² o la densidad poblacional por barrio.
+
+En cuanto a las líneas de subte, se observa que la concentración de estaciones disminuye hacia la periferia de la ciudad, siendo más notable en áreas como Balvanera, San Nicolás y Monserrat, caracterizadas por funciones administrativas y comerciales. En este contexto, el barrio de Villa Lugano, ubicado en el sur de la ciudad, presenta una escasa oferta de estaciones de bicicletas y una casi nula presencia de líneas de subte en sus cercanías. Esto sugiere que las/os estudiantes que viven en áreas periféricas pueden enfrentar mayores desafíos de movilidad para acceder a diversos servicios, incluidas las propias estaciones de subte/bicicleta.
+
++**Oportunidad**: Aunque la expansión de infraestructuras para la generación de nuevas estaciones puede ser más costosa tanto económicamente como en términos temporales, el análisis proporciona una base sólida para la priorización de barrios que carecen de estaciones de bicicletas o tienen una presencia limitada. Esta información puede ser clave para desarrollar estrategias de movilidad más inclusivas y eficientes en la ciudad, que funiconen como ficalitadores de acceso a la educación. 
+
+Por último, la integración eficiente de modos de transporte, como bicicletas y subte, sumados a trenes y colectivos, es esencial para facilitar el acceso equitativo a la educación y otros servicios de relevancia. Se identifica la necesidad de generar estrategias que fomenten la interconexión y complementariedad de estos sistemas.
+
+##Notas a docentes
+
+Para el presente trabajo se intento realizar el análisis con otra casa de estudio: Facultad de Ciencias Sociales de la UBA, sede Constitución. Sin embargo,la georeferenciación mediante OSM ha presentado diversos errores que se detallan a continuación. 
+
+```{r}
+FSOC <- geo(address = "Santiago del Estero 1029, Ciudad de Buenos Aires, Argentina",
+            method = "osm")
+```
+
+```{r}
+leaflet(FSOC) %>%
+  addTiles() %>% 
+  addMarkers(~long, ~lat)
+```
+
+Como se puede observar la georeferenciación no es correcta, ya qye la FSOC se ubica en Santiago del Estero, entre Humbero I y Carlos Calvo, no Adolfo Alsina como aquí sucede. Se ha intentando corregir el error mediante otras funciones como geolocalización inversa, pero R arroja un error relacionado a la necesidad de contar con una API:
+
+Error in `geocode()`:
+! Google now requires an API key; see `ggmap::register_google()`.
+Backtrace:
+ 1. ggmap::geocode(...)
+Error in geocode("Santiago del Estero 1029, Ciudad de Buenos Aires, Argentina",  :
+
+En esta misma línea, se ha reproducido el código con diversas direcciones de la zona sur y en ninguno de los casos la geolocalización fue exacta o aproximada, los puntos se encontraban a 8 cuadras de la localización real. Dado que el margen de error se considera elevado y desconociendo el motivo del problema, pero con intenciones de sostener el análisis en la zona sur, se opta por geolocalizar la Universidad Tecnológica Nacional, ubicada en el barrio de Villa Lugano, perteneciente a la comuna 8 de la Ciudad Autónoma de Buenos Aires. Sin dificultades en dicha geolocalización el análisis se realizó a partir de la misma.
+
+Cabe aclarar que debido al error presentado, algunas preguntas originales del análisis variaron. Se tomo la decisión de no sostenerlas dado que hubiese sido complejo para el/la lector/a seguir el hilo condcuctor del análisis.
